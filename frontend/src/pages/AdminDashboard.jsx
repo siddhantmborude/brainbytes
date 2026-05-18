@@ -251,7 +251,7 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 flex-wrap">
-        {['shipments', 'create', 'agents', 'customers', 'conflicts'].map(tab => (
+        {['shipments', 'create', 'agents', 'customers', 'conflicts', 'pod'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -261,6 +261,7 @@ export default function AdminDashboard() {
              tab === 'customers' ? '👤 Customers' :
              tab === 'create' ? '➕ Create Shipment' :
              tab === 'conflicts' ? `⚠️ Conflicts ${conflicts.filter(c => c.status === 'Active').length > 0 ? `(${conflicts.filter(c => c.status === 'Active').length})` : ''}` :
+             tab === 'pod' ? '📜 Proof of Package' :
              '📦 Shipments'}
           </button>
         ))}
@@ -569,6 +570,142 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* TAB: Proof of Package */}
+      {activeTab === 'pod' && (() => {
+        const delivered = shipments.filter(s => s.status === 'Delivered');
+        const avgScore = delivered.length > 0
+          ? Math.round(delivered.reduce((acc, s) => acc + (s.confidence_score || 100), 0) / delivered.length)
+          : 100;
+
+        return (
+          <div className="space-y-6">
+            {/* Stats Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-3xl font-bold font-mono">{delivered.length}</p>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Verified Hand-Offs (PoP)</p>
+                </div>
+                <span className="text-3xl">📜</span>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className={`text-3xl font-bold font-mono ${
+                    avgScore >= 80 ? 'text-green-600' : avgScore >= 50 ? 'text-amber-500' : 'text-red-500'
+                  }`}>{avgScore}%</p>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Average Trust Level</p>
+                </div>
+                <div className="relative w-12 h-12 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="24" cy="24" r="20" stroke="#f1f5f9" strokeWidth="4" fill="transparent" />
+                    <circle cx="24" cy="24" r="20" stroke={
+                      avgScore >= 80 ? '#22c55e' : avgScore >= 50 ? '#f59e0b' : '#ef4444'
+                    } strokeWidth="4" fill="transparent"
+                    strokeDasharray={2 * Math.PI * 20}
+                    strokeDashoffset={2 * Math.PI * 20 * (1 - avgScore / 100)} />
+                  </svg>
+                  <span className="absolute text-[10px] font-bold text-slate-700">AVG</span>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <p className="text-3xl font-bold font-mono text-slate-800">{shipments.filter(s => s.status !== 'Delivered').length}</p>
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-1">Active Route Chains</p>
+                </div>
+                <span className="text-3xl">🚛</span>
+              </div>
+            </div>
+
+            {/* Registry Table */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-700">Proof of Package (PoP) Registry</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Real-time custody tracking, confidence meters, and secure electronic handover logs.</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase bg-slate-50/50">
+                      <th className="py-3.5 px-4 rounded-l-lg">Package ID</th>
+                      <th className="py-3.5 px-4">Route</th>
+                      <th className="py-3.5 px-4">Confidence Meter</th>
+                      <th className="py-3.5 px-4">Delivery Status</th>
+                      <th className="py-3.5 px-4 rounded-r-lg">Digital Verification Certificate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shipments.map(s => {
+                      let pod = null;
+                      if (s.proof_of_delivery) {
+                        try { pod = JSON.parse(s.proof_of_delivery); } catch(_) {}
+                      }
+
+                      return (
+                        <tr key={s.id} className="border-b border-slate-100/80 hover:bg-slate-50/40 transition-colors text-sm">
+                          <td className="py-4 px-4 font-mono font-bold text-blue-600">{s.id}</td>
+                          <td className="py-4 px-4 text-slate-700">
+                            <span className="font-semibold">{s.source}</span>
+                            <span className="text-slate-400 mx-1.5">→</span>
+                            <span className="font-semibold">{s.destination}</span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    s.confidence_score >= 80 ? 'bg-green-500' :
+                                    s.confidence_score >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${s.confidence_score || 100}%` }}
+                                />
+                              </div>
+                              <span className="font-mono font-bold text-xs text-slate-600">{s.confidence_score || 100}%</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              s.status === 'Delivered' ? 'bg-green-50 text-green-700 border border-green-200' :
+                              s.status === 'Issue' ? 'bg-red-50 text-red-700 border border-red-200' :
+                              'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {s.status}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4">
+                            {pod ? (
+                              <div className="bg-slate-900 text-white rounded-xl p-3 border border-slate-800 space-y-1.5 max-w-sm">
+                                <div className="flex justify-between items-center text-[10px] pb-1.5 border-b border-slate-800/80">
+                                  <span className="font-bold text-blue-400 uppercase tracking-wider">{pod.verification_method}</span>
+                                  <span className="bg-green-500/20 text-green-300 px-1 py-0.2 rounded font-bold uppercase">{pod.status}</span>
+                                </div>
+                                <div className="text-[10px] space-y-1 text-slate-400">
+                                  <div className="flex justify-between font-semibold"><span className="text-slate-400 font-normal">Courier:</span> <span className="text-slate-200">{pod.agent_name}</span></div>
+                                  <div className="flex justify-between font-semibold"><span className="text-slate-400 font-normal">Time:</span> <span className="text-slate-200">{new Date(pod.timestamp).toLocaleString()}</span></div>
+                                  <div className="flex justify-between font-semibold"><span className="text-slate-400 font-normal">GPS Validation:</span> <span className="font-mono text-slate-200">{pod.final_coordinates?.lat.toFixed(4)}, {pod.final_coordinates?.lng.toFixed(4)}</span></div>
+                                  <div className="flex justify-between border-t border-slate-800/50 pt-1 text-blue-300 font-mono"><span className="text-[9px]">Certificate ID:</span> <span>{pod.signature_token}</span></div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 max-w-max">
+                                <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-pulse"></span>
+                                Pending Route Completion
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -168,28 +168,51 @@ class SimulationEngine {
 
     if (!nextStage) {
       // All done
+      const lastStage = chain[chain.length - 1];
+      const agent = lastStage.handler_id ? await prisma.user.findUnique({ where: { id: lastStage.handler_id } }) : null;
+      const podData = JSON.stringify({
+        verification_method: "QR Handover & Geofence Authenticated",
+        signature_token: `POD-SIG-${shipment.id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        final_coordinates: { lat: lastStage.lat ?? 19.076, lng: lastStage.lng ?? 72.877 },
+        timestamp: new Date().toISOString(),
+        agent_name: agent?.name || "System Courier",
+        agent_email: agent?.email || "courier@tracksync.com",
+        status: "SECURED"
+      });
+
       await prisma.shipment.update({
         where: { id: shipment.id },
-        data: { status: 'Delivered', simulation_state: 'FINISHED', current_agent_id: null }
+        data: { status: 'Delivered', simulation_state: 'FINISHED', current_agent_id: null, proof_of_delivery: podData }
       });
       console.log(`[DELIVERED] ${shipment.id}`);
-      this.broadcast(shipment.id);
+      await this.broadcast(shipment.id);
       return;
     }
 
     // Is this the customer stage?
     if (nextStage.stage.startsWith('Customer')) {
       const now = new Date();
+      const agent = nextStage.handler_id ? await prisma.user.findUnique({ where: { id: nextStage.handler_id } }) : null;
+      const podData = JSON.stringify({
+        verification_method: "Direct Customer OTP Handover",
+        signature_token: `POD-SIG-${shipment.id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        final_coordinates: { lat: nextStage.lat ?? 19.076, lng: nextStage.lng ?? 72.877 },
+        timestamp: now.toISOString(),
+        agent_name: agent?.name || "Last-mile Agent",
+        agent_email: agent?.email || "lastmile@tracksync.com",
+        status: "VERIFIED"
+      });
+
       await prisma.shipmentChain.update({
         where: { id: nextStage.id },
         data: { status: 'Active', arrived_at: now, accepted_at: now, timestamp: now }
       });
       await prisma.shipment.update({
         where: { id: shipment.id },
-        data: { current_agent_id: nextStage.handler_id, status: 'Delivered' }
+        data: { current_agent_id: nextStage.handler_id, status: 'Delivered', proof_of_delivery: podData }
       });
       console.log(`[DELIVERED] ${shipment.id} → Customer`);
-      this.broadcast(shipment.id);
+      await this.broadcast(shipment.id);
       return;
     }
 
@@ -204,10 +227,35 @@ class SimulationEngine {
       data: { status: 'Awaiting Handover' }
     });
     console.log(`[ARRIVED] ${shipment.id} → Package arrived at ${nextStage.stage}, awaiting handover`);
-    this.broadcast(shipment.id);
+    await this.broadcast(shipment.id);
   }
 
   async broadcast(shipmentId) {
+    // 1) Dynamic Confidence Score Calculation!
+    const incidents = await prisma.incident.findMany({ where: { shipment_id: shipmentId } });
+    const conflicts = await prisma.conflict.findMany({ where: { shipment_id: shipmentId } });
+
+    let confidence = 100;
+    confidence -= incidents.length * 15;
+
+    for (const c of conflicts) {
+      if (c.type === 'WRONG_AGENT') confidence -= 25;
+      else if (c.type === 'WRONG_HUB') confidence -= 20;
+      else if (c.type === 'STUCK') confidence -= 10;
+      else if (c.type === 'ALREADY_DELIVERED') confidence -= 15;
+      else if (c.type === 'DOUBLE_SCAN') confidence -= 5;
+      else confidence -= 10;
+    }
+
+    if (confidence < 0) confidence = 0;
+    if (confidence > 100) confidence = 100;
+
+    // Update in database so it is persistently stored
+    await prisma.shipment.update({
+      where: { id: shipmentId },
+      data: { confidence_score: confidence }
+    });
+
     const updated = await prisma.shipment.findUnique({
       where: { id: shipmentId },
       include: {

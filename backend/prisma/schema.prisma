@@ -32,6 +32,8 @@ model Shipment {
   incidents        Incident[]
   conflicts        Conflict[]
   scanLogs         ScanLog[]
+  confidence_score Int      @default(100)
+  proof_of_delivery String?  // JSON string containing signature, coordinates, final timestamp
 }
 
 model ShipmentChain {

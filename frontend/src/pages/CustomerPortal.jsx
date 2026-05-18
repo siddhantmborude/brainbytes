@@ -199,6 +199,93 @@ export default function CustomerPortal() {
               <p className="flex items-center gap-1 mt-1 text-sm opacity-80"><MapPin size={14} />{data.shipment.source} → {data.shipment.destination}</p>
             </div>
 
+            {/* Confidence Score Card */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-slate-700 text-sm">Chain Confidence Score</h3>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  data.shipment.confidence_score >= 80 ? 'bg-green-100 text-green-700' :
+                  data.shipment.confidence_score >= 50 ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {data.shipment.confidence_score >= 80 ? 'High Trust' :
+                   data.shipment.confidence_score >= 50 ? 'Medium Trust' : 'Low Trust'}
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="28" cy="28" r="24" stroke="#f1f5f9" strokeWidth="5" fill="transparent" />
+                    <circle cx="28" cy="28" r="24" stroke={
+                      data.shipment.confidence_score >= 80 ? '#22c55e' :
+                      data.shipment.confidence_score >= 50 ? '#f59e0b' : '#ef4444'
+                    } strokeWidth="5" fill="transparent"
+                    strokeDasharray={2 * Math.PI * 24}
+                    strokeDashoffset={2 * Math.PI * 24 * (1 - (data.shipment.confidence_score || 100) / 100)} />
+                  </svg>
+                  <span className="absolute font-mono font-bold text-slate-800 text-sm">{data.shipment.confidence_score || 100}%</span>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {data.shipment.confidence_score >= 80 ? 'Perfect custody transitions with authenticated QR code handovers.' :
+                     data.shipment.confidence_score >= 50 ? 'Minor delays or hub conflicts detected but resolved successfully.' :
+                     'High volume of handoff conflicts or active incidents reported in this chain.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Proof of Package */}
+            {data.shipment.status === 'Delivered' && data.shipment.proof_of_delivery && (() => {
+              try {
+                const pod = JSON.parse(data.shipment.proof_of_delivery);
+                return (
+                  <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg border border-slate-800 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold tracking-widest text-blue-400">Secure Delivery Certificate</p>
+                        <h4 className="font-bold text-base tracking-tight mt-0.5">📦 Proof of Package</h4>
+                      </div>
+                      <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                        {pod.status || "VERIFIED"}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-3 space-y-2.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Method</span>
+                        <span className="font-semibold text-slate-200">{pod.verification_method}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Delivered At</span>
+                        <span className="font-semibold text-slate-200">{new Date(pod.timestamp).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Coordinates</span>
+                        <span className="font-mono text-slate-200">{pod.final_coordinates?.lat.toFixed(4)}, {pod.final_coordinates?.lng.toFixed(4)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Delivering Courier</span>
+                        <span className="font-semibold text-slate-200">{pod.agent_name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Verification ID</span>
+                        <span className="font-mono text-blue-300">{pod.signature_token}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-4 text-center">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Customer Digital Signature</p>
+                      <p className="font-serif italic text-xl text-blue-300 py-1 font-semibold tracking-wider select-none">
+                        {pod.agent_name.split(' ')[0]} Verified
+                      </p>
+                      <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent mx-auto mt-1"></div>
+                    </div>
+                  </div>
+                );
+              } catch (_) { return null; }
+            })()}
+
             {/* Live Update Banner */}
             {liveMsg && (
               <div className="p-4 bg-white border border-blue-200 rounded-xl shadow-sm text-blue-800 text-sm flex items-start gap-2">
