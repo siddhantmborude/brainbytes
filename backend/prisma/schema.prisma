@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   // CUSTOMER, DELIVERY, ADMIN
+  hub       String?  // If delivery partner
+}
+
+model Shipment {
+  id               String   @id // e.g. PKG1023
+  source           String
+  destination      String
+  status           String   // Created, In Transit, Delayed, Delivered, Issue
+  current_agent_id Int?
+  simulation_state String   // e.g. ACTIVE, PAUSED
+  owner_email      String?
+  route_data       String?  // GeoJSON or encoded polyline
+  createdAt        DateTime @default(now())
+  
+  chain            ShipmentChain[]
+  incidents        Incident[]
+  conflicts        Conflict[]
+  scanLogs         ScanLog[]
+}
+
+model ShipmentChain {
+  id           Int      @id @default(autoincrement())
+  shipment_id  String
+  stage        String   // Manufacturer, Transit Checkpoint N, Customer
+  handler_id   Int?
+  hub          String?
+  lat          Float?
+  lng          Float?
+  status       String   @default("Pending") // Pending | Arrived | Waiting | Active | Completed
+  arrived_at   DateTime?
+  accepted_at  DateTime?
+  timestamp    DateTime @default(now())
+
+  shipment     Shipment @relation(fields: [shipment_id], references: [id])
+}
+
+model Incident {
+  id          Int      @id @default(autoincrement())
+  shipment_id String
+  issue       String
+  severity    String
+  status      String   @default("Active")
+  createdAt   DateTime @default(now())
+
+  shipment    Shipment @relation(fields: [shipment_id], references: [id])
+}
+
+model Conflict {
+  id          Int      @id @default(autoincrement())
+  shipment_id String
+  type        String   // WRONG_AGENT | ALREADY_DELIVERED | WRONG_HUB | DOUBLE_SCAN | STUCK
+  description String
+  severity    String   @default("Medium") // Low | Medium | High | Critical
+  status      String   @default("Active") // Active | Resolved | Dismissed
+  agent_id    Int?
+  detected_at DateTime @default(now())
+  resolved_at DateTime?
+  resolved_by String?
+
+  shipment    Shipment @relation(fields: [shipment_id], references: [id])
+}
+
+model ScanLog {
+  id          Int      @id @default(autoincrement())
+  shipment_id String
+  agent_id    Int
+  agent_name  String
+  stage_id    Int?
+  result      String   // SUCCESS | CONFLICT | REJECTED
+  reason      String?
+  scanned_at  DateTime @default(now())
+
+  shipment    Shipment @relation(fields: [shipment_id], references: [id])
+}
